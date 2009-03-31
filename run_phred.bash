@@ -16,6 +16,11 @@ tarpath=$(readlink -f $1)
 refpath=$(readlink -f $2)
 datpath=$(readlink -f $3)
 
+# Use default PHRED_PARAMETER_FILE if it is missing
+if [ -z "$PHRED_PARAMETER_FILE" ]; then
+    export PHRED_PARAMETER_FILE=./phredpar.dat
+fi
+
 # Working directory unique to current process
 cd "`make_temp_scratch_dir`"
 
@@ -34,7 +39,7 @@ rm $basetar
 mv traces/submap.pickle .
 
 # Run phred
-PHRED_PARAMETER_FILE=./phredpar.dat ./phred -id traces -sa sequences.fa -qa qualities.fa > scores.txt
+./phred -id traces -sa sequences.fa -qa qualities.fa > scores.txt
 
 # Get the alignments of the phred calls to the refseqs
 $BLAT $refpath sequences.fa correspondances.psl
