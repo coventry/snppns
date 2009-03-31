@@ -8,7 +8,7 @@ class IndexID:
 
 class Map:
 
-    def __init__(self, tid, refseq, blockcount, strand, lengths, 
+    def __init__(self, tid, refseq, blockcount, strand, lengths,
                  qstarts, tstarts, transform, seqlen):
         self.tid, self.refseq, self.strand = tid, refseq, strand
         for elt in lengths, qstarts, tstarts:
@@ -49,4 +49,4 @@ class Map:
             line[8],line[9],line[13],int(line[17]))+tuple(line[18:21])
         return cls(tid, refseq, blockcount, strand, lengths, qstarts,
                    tstarts, gencoordmap, seqlen)
-    
+

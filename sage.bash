@@ -3,7 +3,7 @@
 # This takes a copy of sage to the local scratch space and runs it, to
 # minimize load on the NFS.
 
-# Fail on error 
+# Fail on error
 set -e
 set -o pipefail
 
@@ -11,10 +11,10 @@ source "`dirname $0`/config.bash"
 
 sagedir=${scratchdir}/sage
 
-if ! [ -e $sagedir ]; then 
+if ! [ -e $sagedir ]; then
     # Copy sage from NFS and unpack it.
     # ...put it in a temp dir, to minimize risk of race conditions
-    tmpdir="`make_temp_scratch_dir`" 
+    tmpdir="`make_temp_scratch_dir`"
     initial_dir=$PWD
     cd "$tmpdir"
     tar zxf ${reldir}/sage.tgz
@@ -31,5 +31,5 @@ if ! [ -e $sagedir ]; then
     cd $initial_dir
 fi
 
-# Run sage 
+# Run sage
 ${sagedir}/sage -python "$@"

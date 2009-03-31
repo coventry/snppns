@@ -114,7 +114,7 @@ class PostPeak(Peak):
 
     def gendist(self):
         return peakposteriors[self.peaks][self.bin]
-    
+
 # Memoize the score/call relationship
 bytescores = [PostPeak(byte=byte) for byte in xrange(240)]
 rawscores  = dict(

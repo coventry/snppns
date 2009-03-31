@@ -4,7 +4,7 @@ from sequences import reverse_complement
 from datadir import datadir
 from SNPPosterior import (pcalls, ppeaks, peakidxs, revcalls, Peak,
                           bytescores)
-                          
+
 ppath = os.path.join(datadir, 'best_mixture_priors.pickle')
 priors = cPickle.load(open(ppath))
 

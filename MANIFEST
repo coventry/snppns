@@ -9,12 +9,12 @@ MANIFEST
 Pyrex-0.9.8.5.tar.gz
 python/aggregate.py
 python/best_mixture_priors.pickle
-python/BlatMap.py     
+python/BlatMap.py
 python/choose_peaks.py
 python/datadir.py
-python/Dirichlet.py   
-python/_Dirichlet.pyx 
-python/Fasta_file.py  
+python/Dirichlet.py
+python/_Dirichlet.pyx
+python/Fasta_file.py
 python/genotype_frequencies.pickle
 python/inference.py
 python/make_phred_jobs.py

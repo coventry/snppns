@@ -65,7 +65,7 @@ class Sample:
                 val /= total_observations[strand]
                 val *= min(total_observations[strand], 100)
         gdist = hyperprior.posterior(call_counts).sample()
-        
+
         return Sample(gdist, counts, site_dists)
 
 class InitialSample(Sample):
@@ -81,7 +81,7 @@ class InitialSample(Sample):
         # direction in which to move.
         return dict((strand, self.initial_model)
                     for strand in '+-')
-            
+
 
 class PriorSampler:
 
@@ -157,4 +157,4 @@ if __name__ == '__main__':
     savepath = os.path.join(
         datadir, os.path.basename(colpath) + '.results')
     main(tables, savepath=savepath)
-    
+

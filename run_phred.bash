@@ -1,4 +1,4 @@
-#!/usr/bin/env bash                                                                                                                                                                                                                                                                                                            
+#!/usr/bin/env bash
 
 # This runs phred on a tarball of trace files, finds the longest
 # alignment of the phred basecalls to the reference sequence (using

@@ -5,7 +5,7 @@ LICENCE
 -------
 
 This software is in the public domain.  If you use it, I request that
-you cite the forthcoming methods paper.  
+you cite the forthcoming methods paper.
 
 No warranty express or implied, etc.  I hope it's useful to someone, and
 (within reason) I will try to help with any problems which come up, but
@@ -93,19 +93,19 @@ The application requires the following inputs:
   For instance, suppose we have a baby sequencing project with two
   subjects, covering a short locus, and two trace files for each
   subject.  The paths to the for trace files might be
-  
+
   project-traces/RHICF1E857558A.scf.gz
   project-traces/RHICF1E857458A.scf.gz
   project-traces/RHICF1E556426A.scf.gz
   project-traces/RHICF1E770526A.scf.gz
-  
+
   The refseq file might be called refseqs.fa and contain
-  
+
   >first-ref-seq
   ATGGAGGCCAAGGCTAGAGAGAGATTTCCAGGCCTCTCCCCAACAGATCTCTGTCATGGTTTTCCTGGAA
-  
-  And the map file might be called subject-map.txt and contain 
-  
+
+  And the map file might be called subject-map.txt and contain
+
   RHICF1E857558A Subject-1
   RHICF1E857458A Subject-1
   RHICF1E556426A Subject-2
@@ -129,7 +129,7 @@ install.
   cluster if you use it.  Note that SnppnS doesn't automatically clean
   up its scratch space workfiles.  It will leave "SnppnStmp.*"
   subdirectories and may leave "sage" symlinks.
-  
+
 
 - originalphredsourcedir: Absolute path to the "source" subdirectory of
   your phred distribution.  Don't put this source directory in the
@@ -141,7 +141,7 @@ install.
   $reldir/sage.bash if you're going to be using sage installed on the
   networked filesystem.  If you've been able to install sage in the same
   location on each of the cluster nodes, set it to <path to sage
-  directory>/sage, i.e. the path to the sage executable.  
+  directory>/sage, i.e. the path to the sage executable.
 
 - LOCALSAGE: If you're using sage, you also need to set this to the sage
   executable within its initial install.
@@ -173,7 +173,7 @@ PATCHING AND BUILDING PHRED AND PYTHON SUBCOMPONENT
 
 XXX FIXME: The phred parameter file needs to be taken from the latest
 version of phred
-  
+
 This release provides a patch to the phred source code.  The phred
 application is distributed under a fairly restrictive licence, so I
 can't just give it to you.  However, Phil Green has granted me
@@ -204,10 +204,10 @@ command:
 sage.bash takes the tar ball of sage produced by this command and uses
 it to set up sage in the local scratch spaces on the cluster nodes.
 
-RUNNING PHRED ON THE TRACE FILES     
+RUNNING PHRED ON THE TRACE FILES
 --------------------------------
 
-Run the command 
+Run the command
 
   % python $reldir/python/make_phred_jobs.py <tracedir> <mappath> <numjobs>
 
@@ -244,7 +244,7 @@ For instance, if I've made 100 such files, my refseq file is
 results in ./calls, I might submit the jobs to my SGE cluster queue with
 the command
 
-  % for i in `seq 0 99` ; do 
+  % for i in `seq 0 99` ; do
       rm -f /var/tmp/job
       echo $reldir/run_phred.bash job.$i.tar ./refseq.fa ./calls > /var/tmp/job
       qsub -N snppns.$i -cwd -V /var/tmp/job
@@ -276,18 +276,18 @@ transposed.  The inference procedure is fairly slow, and needs to be
 split across a cluster computation, so once the columns are gathered,
 they need to be aggregated as cluster jobs
 
-Run 
+Run
 
   % python $reldir/python/split_columns.py <numcols> <resultpath> <resultpath> ...
 
 Here numcols is the number of columns per cluster job, and the
 <resultpath> arguments are the paths to the results files just
-generated.  For example, 
+generated.  For example,
 
   % python $reldir/python/split_columns.py 10 ./calls/job.*.tar.results
 
 would split the results from the last section into groups of at most ten
-columns.  The groups are saved in files named 
+columns.  The groups are saved in files named
 
   cols.<seqname>.<startidx>-<endidx>.pickle
 
@@ -323,7 +323,7 @@ Again, make sure all of the results are there before proceeding.
 GENERATING THE FINAL REPORT
 ---------------------------
 
-Run 
+Run
 
   % python $reldir/python/report.py <numcols> <subject list> <resultspath> <resultspath> ...
 
@@ -341,7 +341,7 @@ results files just generated.  So
 would generate reports with 100 columns per file from the results files
 generated in the previous section.
 
-The report files will be gzipped comma-separated-values files called 
+The report files will be gzipped comma-separated-values files called
 
   <seqname>.<startidx>-<endidx>.csv.gz
 
@@ -366,10 +366,10 @@ the first three samples and first three reference sequence sites:
 
 Prior   |CC 99 |GG 99 |GG 51 |
         |      |      |AG 38 |
-        |      |      |AA 10 |      
+        |      |      |AA 10 |
 
 sample1 |CC 99 |GG 99 |AG 89 |
-        |      |      |GG 10 |      
+        |      |      |GG 10 |
 
 sample2 |None  |None  |None  |
 
@@ -383,14 +383,14 @@ A few things can be read out of this table:
    are AA.  Because there was considerably less uncertainty at sites 231
    and 233, only the first row of the block is used in those columns.
    The other rows are empty.
-   
+
  - Something went wrong with sample2, and no alignable sequence could be
    produced from its tracefiles at these loci, so there are no
    predictions.
 
  - No traces produced sequence alignable at position 232, so it was
    excluded from the table.
-   
+
  - There is some uncertainty about site 234 in sample1, but it's AG with
    89% probability.  (This probability takes multiple sampling into
    account.  If an allele is rare at a given site, there will need to be

@@ -129,7 +129,7 @@
 +   tr_vals_copy = (FLOAT **)ourMalloc(4*sizeof(FLOAT *));
 +   for (nucidx = 0; nucidx < 4 ; nucidx++) {
 +     tr_vals_copy[nucidx] = (FLOAT *)ourMalloc(tr_length*sizeof(FLOAT));
-+   }      
++   }
 + 
 +   /* Get a list of the peaks with nontrivial best_uncalled_peak
 +      members.  The linked list will be copied to the peaks array in
@@ -164,7 +164,7 @@
 +     /* ********************************************************************
 +        For those peaks, first get the qualities when the uncalled
 +        bases are zeroed out. */
-+     
++ 
 +     /* ...get a fresh copy of the traces and peaks, so we don't mess
 +        up the originals */
 +     copy_traces(tr_vals, tr_vals_copy, tr_length);
@@ -291,7 +291,7 @@
 + 	     quality[i],
 + 	     peak->best_obs_peak->nuc,
 + 	     peak->best_obs_peak->i_maxx);
-+       
++ 
 +     }
 +     if (peak->best_uncalled_peak) {
 +       assert(peak->best_obs_peak);

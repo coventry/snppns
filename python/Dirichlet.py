@@ -10,7 +10,7 @@ class Dirichlet(_Dirichlet.Dirichlet):
             while sampprob == 0:
                 sampprob = random.gammavariate(alpha, 1)
             csample[aidx] = sampprob
-        return scale*scipy.array(csample)/sum(csample)            
+        return scale*scipy.array(csample)/sum(csample)
 
 class DirichletMixture:
 

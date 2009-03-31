@@ -73,4 +73,4 @@ for jobnum, patients in enumerate(jobgroups):
     assert not os.system(tarcmd)
     # Tear down the symlink farm
     assert not os.system('rm -rf ' + tempdir)
-    
+

@@ -8,7 +8,7 @@ cdef class Dirichlet:
     cdef readonly int numevents
 
     def __init__(self, alphas):
-        
+
         self.alphas = scipy.array(alphas)
         if min(alphas) < 0:
             raise ValueError, 'Counts must be positive'
@@ -46,7 +46,7 @@ cdef class Dirichlet:
         for p, c in zip(P, self.alphas):
             rv = rv + (c-1)*log(p)
         return rv
-        
+
     def pdf(self, P):
         return scipy.exp(self.lpdf(P))
 

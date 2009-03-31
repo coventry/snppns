@@ -13,7 +13,7 @@ class Flat_file_loop:
 
         # How often to print how many sequences have been read in.
         self.report_period = report_period
-        
+
     def __getitem__(self, index):
         if not self.read():
             raise IndexError, 'End of plain file'
