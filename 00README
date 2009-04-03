@@ -1,0 +1,420 @@
+SnppnS is an experimental software application for detection of rare
+SNPs in diploid Sanger sequence tracefile data.
+
+LICENCE
+-------
+
+This software is in the public domain.  If you use it, I request that
+you cite the forthcoming methods paper.  
+
+No warranty express or implied, etc.  I hope it's useful to someone, and
+(within reason) I will try to help with any problems which come up, but
+if you use it, you are responsible for the consequences.
+
+USER PREREQUISITES
+------------------
+
+Because this is a cluster-based computation, it is basically impossible
+to make it a turn-key application.  There are just too many cluster
+frameworks, and too many important cluster-specific features.  (MPI only
+solves the simplest part of the problem.)
+
+So I tried to make these instructions as thorough and understandable as
+possible, but to use this program you are going to have to adjust some
+scripts to accomodate your system, and you will need some basic
+familiarity with linux and shell scripting.
+
+SYSTEM REQUIREMENTS
+-------------------
+
+  - Phred.  Information on obtaining it is available here:
+    http://www.phrap.com/priceinfo.htm
+
+    You need version 0.020425.c.  If you don't have it already, ask for
+    this version specifically when applying to download phred.  (It is
+    being kept available specifically for SnppnS.)
+
+  - BLAT.  It is available for download here:
+    http://genome.ucsc.edu/FAQ/FAQblat#blat3
+
+  - A linux-based compute cluster with some sort of networked file
+    system (NFS) mounted identically on all cluster nodes, and python2.5
+    and scipy installed.  If you can't install a binary distribution of
+    scipy, you can use sage, which contains python and scipy and seems
+    to have a much easier install process than standalone scipy.  It can
+    be obtained from here: <http://www.sagemath.org/download.html> If
+    you end up installing sage, use "sage -python" in the following
+    instructions whenever they invoke python.
+
+    Depending on how robust your NFS is, it would probably also be
+    better to use sage if you're unable to install python2.5 and scipy
+    locally on each of the cluster nodes.  If you run this using a
+    python2.5 installed in the NFS, the NFS is likely to be flooded by a
+    huge number of file accesses.
+
+    The cluster had better use a fairly recent version of linux (as of
+    Mar 2009.)  It will need fairly recent versions of bash and gcc.
+
+  - A machine with enough memory to comfortably allocate four bytes of
+    memory for every site covered by the sequencing.  (That is,
+    4*(number of subject samples)*(total length of reference sequences))
+
+    (This machine is only needed for the step described in the ARRANGING
+    THE PEAK OBSERVATIONS BY COLUMNS section below.)
+
+  - GNU coreutils, tar and gzip.  (Hopefully these are installed by
+    default.)
+
+PROGRAM INPUTS
+--------------
+
+The application requires the following inputs:
+
+  - A set of gzipped trace files.  They can be from either strand.
+    Their filenames should be ASCII, end with '.scf.gz', and should not
+    contain any spaces.  They can be in different directories, but their
+    basenames (the last part of the file paths, not including the parent
+    directories) should be distinct from each other.
+
+  - A FASTA file containing the reference sequences for the
+    loci covered by the trace files.  Contiguous or overlapping loci can
+    be included in a single sequence.  There is no need to include
+    separate sequences for each amplicon.
+
+  - A map from sample subject IDs to trace files.  Each line maps a
+    trace to the ID of the sample from which it was generated.  It
+    should contain the basename of the trace filename, without the
+    filename suffixes, and be followed by a space, then the
+    corresponding subject ID.  The subject IDs should not contain any
+    spaces, and should be ASCII.
+
+* Example
+
+  For instance, suppose we have a baby sequencing project with two
+  subjects, covering a short locus, and two trace files for each
+  subject.  The paths to the for trace files might be
+  
+  project-traces/RHICF1E857558A.scf.gz
+  project-traces/RHICF1E857458A.scf.gz
+  project-traces/RHICF1E556426A.scf.gz
+  project-traces/RHICF1E770526A.scf.gz
+  
+  The refseq file might be called refseqs.fa and contain
+  
+  >first-ref-seq
+  ATGGAGGCCAAGGCTAGAGAGAGATTTCCAGGCCTCTCCCCAACAGATCTCTGTCATGGTTTTCCTGGAA
+  
+  And the map file might be called subject-map.txt and contain 
+  
+  RHICF1E857558A Subject-1
+  RHICF1E857458A Subject-1
+  RHICF1E556426A Subject-2
+  RHICF1E770526A Subject-2
+
+SETTING THE PROGRAM UP FOR YOUR CLUSTER
+---------------------------------------
+
+Let's call the absolute path to the directory containing this README file
+$reldir.  $reldir and all other files mentioned in this documentation
+need to be accessible via the same file path on all cluster nodes.
+
+You need to modify the environment variable settings in
+$reldir/config.bash to reflect your cluster filesystem and your python
+install.
+
+- scratchdir: This should be an absolute path to local scratch space on
+  each cluster node.  In a pinch, you could use /var/tmp, but check your
+  cluster documentation.  The cluster administrator has almost certainly
+  set aside specific scratch space, and it'll be better for you and the
+  cluster if you use it.  Note that SnppnS doesn't automatically clean
+  up its scratch space workfiles.  It will leave "SnppnStmp.*"
+  subdirectories and may leave "sage" symlinks.
+  
+
+- originalphredsourcedir: Absolute path to the "source" subdirectory of
+  your phred distribution.  Don't put this source directory in the
+  SnppnS release directory.
+
+- BLAT: The absolute path to the blat alignment program.
+
+- PYTHON: The absolute path to python 2.5.  Set this to
+  $reldir/sage.bash if you're going to be using sage installed on the
+  networked filesystem.  If you've been able to install sage in the same
+  location on each of the cluster nodes, set it to <path to sage
+  directory>/sage, i.e. the path to the sage executable.  
+
+- LOCALSAGE: If you're using sage, you also need to set this to the sage
+  executable within its initial install.
+
+OVERVIEW OF BUILDING AND INFERENCE PROCEDURES
+---------------------------------------------
+
+As an overview of the following sections, here is a brief example of
+SnppnS usage.
+
+  % # Build phred and python components (only have to do this once.)
+  % $reldir/build.bash
+
+  % # Gather traces together to run phred on them
+  % python $reldir/python/make_phred_jobs.py <tracedir> <mappath> <numjobs>
+
+  % # Submit resulting phred jobs to your compute cluster (system-specific)
+
+  % # Gather homologous peak observations for population-level inference
+  % python $reldir/python/split_columns.py <numcols> /datadar/job.*.tar.results
+
+  % # Submit resulting inference jobs to your compute cluster
+
+  % # Generate the final CSV reports
+  % python $reldir/python/report.py <numcols> /datadir/cols.*.results
+
+PATCHING AND BUILDING PHRED AND PYTHON SUBCOMPONENT
+---------------------------------------------------
+
+XXX FIXME: The phred parameter file needs to be taken from the latest
+version of phred
+  
+This release provides a patch to the phred source code.  The phred
+application is distributed under a fairly restrictive licence, so I
+can't just give it to you.  However, Phil Green has granted me
+permission to supply a patch which can be used to build a modified
+version of phred from the source code which comes with the distribution.
+This patch is against phred release version 0.020425.c.  You can read
+the version number for your phred release out of the header comment in
+$originalphredsourcedir/setQual.c.
+
+To build the patched phred, run this command:
+
+  % $reldir/build.bash
+
+If you get any errors about mismatches, make sure you've got the right
+version of phred, and $originalphredsourcedir/setQual.c hasn't been
+modified from the release version.
+
+This command also builds a python module.
+
+MAKING A TAR BALL OF SAGE
+-------------------------
+
+You only need to do this if you're using sage.bash.  Run the following
+command:
+
+  $reldir/make_sage_tar_ball.sh
+
+sage.bash takes the tar ball of sage produced by this command and uses
+it to set up sage in the local scratch spaces on the cluster nodes.
+
+RUNNING PHRED ON THE TRACE FILES     
+--------------------------------
+
+Run the command 
+
+  % python $reldir/python/make_phred_jobs.py <tracedir> <mappath> <numjobs>
+
+- <tracedir> is the path to the top of the directory hierarchy
+  containing the tracefiles.  They can be mixed with other files, but
+  make_phred_jobs.py is going to have to search through the entire
+  subordinate hierarchy, so it will work faster if they are fairly
+  isolated and tightly clustered in the directory tree.
+
+- <mappath> is the map from trace ids to subject ids described above in
+  the "PROGRAM INPUTS" section.
+
+- <numjobs> is the number of cluster jobs you want to split the trace
+  files into.  make_phred_jobs.py will split them into at most that many
+  jobs.  Roughly speaking, you should be OK with two to three times as
+  many tar files as you have cluster nodes, with the trace files spread
+  roughly evenly between them.  Tracefiles for each subject all need to
+  be in the same job, so there can be at most as many jobs as there are
+  subjects.
+
+This will produce a set of files named job.<jobnum>.tar, where <jobnum>
+enumerates the files.  They all go into the current working directory.
+
+Each cluster job should process one of these files using the command
+
+  % $reldir/run_phred.bash <tar-path> <refseq-path> <datadir>
+
+- <refseq-path> is the path to the reference sequence FASTA file
+
+- <map-path> is the path to the trace/subject sample map.
+
+For instance, if I've made 100 such files, my refseq file is
+./refseq.fa, the trace/sample map is ./subject-map.txt, and I want the
+results in ./calls, I might submit the jobs to my SGE cluster queue with
+the command
+
+  % for i in `seq 0 99` ; do 
+      rm -f /var/tmp/job
+      echo $reldir/run_phred.bash job.$i.tar ./refseq.fa ./calls > /var/tmp/job
+      qsub -N snppns.$i -cwd -V /var/tmp/job
+  done
+
+This will put the corresponding results in ./calls/job.<jobnum>.tar.results
+
+Cluster computations are fragile, so it's important to check that all
+the results files are present before proceeding.
+
+ARRANGING THE PEAK OBSERVATIONS BY COLUMNS
+------------------------------------------
+
+This step should be done on a machine with enough memory (see SYSTEM
+REQUIREMENTS above.)
+
+The results files just generated contain trace file peak observations
+for each nucleotide site in the reference sequence, arranged by subject
+sample.
+
+The collection of peak observations from each sample assigned to a
+particular nucleotide site in the reference sequence is called a
+"column."  (The collection would in fact comprise a column if the
+samples' genotypes were arranged in a standard sequence alignment.)
+
+For each nucleotide site, an inference will be run on each column, so
+the data in the results files, which are arranged by sample, need to be
+transposed.  The inference procedure is fairly slow, and needs to be
+split across a cluster computation, so once the columns are gathered,
+they need to be aggregated as cluster jobs
+
+Run 
+
+  % python $reldir/python/split_columns.py <numcols> <resultpath> <resultpath> ...
+
+Here numcols is the number of columns per cluster job, and the
+<resultpath> arguments are the paths to the results files just
+generated.  For example, 
+
+  % python $reldir/python/split_columns.py 10 ./calls/job.*.tar.results
+
+would split the results from the last section into groups of at most ten
+columns.  The groups are saved in files named 
+
+  cols.<seqname>.<startidx>-<endidx>.pickle
+
+The variant portions in the names don't matter too much for our
+purposes, here, but they are used in generating the final report, so
+don't change them.
+
+It also generates a file subject_list.txt, which will also be needed in
+for the final report.  All of these files are put in the current working
+directory.
+
+I recommend keeping numcols small.  There is great variance in the
+runtime per column, and if you assign a cluster node a lot of
+long-running columns, you could be waiting a long time for it.  If your
+queuing system can handle as many jobs as there are characters in your
+reference sequences, setting numcols to 1 is probably a good idea.
+
+RUNNING THE COLUMN INFERENCES
+-----------------------------
+
+Each of the column files just generated need to be processed on your
+cluster nodes by commands of the form
+
+  % $reldir/run_inference.bash <colpath> <datadir>
+
+Here <colpath> is the path to one of the column files, and <datadir> is
+the path to where the cluster jobs should save their results.
+
+The results are saved in <datadir>/<colpath>.results
+
+Again, make sure all of the results are there before proceeding.
+
+GENERATING THE FINAL REPORT
+---------------------------
+
+Run 
+
+  % python $reldir/python/report.py <numcols> <subject list> <resultspath> <resultspath> ...
+
+This will generate a set of CSV files containing the probabilistic
+genotype calls for each site.
+
+Here <numcols> is the number of columns reported on per CSV file.  Don't
+make it too large, or people won't be able to view the results in Excel.
+<subject list> is the subject_list.txt file generated by
+split_columns.py.  The <resultspath> arguments are the paths to the
+results files just generated.  So
+
+  % python $reldir/python/report.py 100 subject_list.txt <datadir>/cols.*.results
+
+would generate reports with 100 columns per file from the results files
+generated in the previous section.
+
+The report files will be gzipped comma-separated-values files called 
+
+  <seqname>.<startidx>-<endidx>.csv.gz
+
+Here <seqname> is a sequence name from the refseqs FASTA file, and
+<startidx>-<endidx> is the range of column indices the file reports on.
+
+Within each report, the first column is used to index the sample IDs.
+The other columns each contain the reports for a nucleotide site.
+
+Because the probability density for a given genotype can be spread
+across multiple values, there can be more than one row per genotype
+distribution.  Only genotypes with a probability of at least 1% are
+reported on.
+
+The first row of reports give the estimated population-level
+distribution of genotypes at that site.  Subsequent rows give the
+estimated posterior genotype distribution at that site in specific
+samples.  For example, consider the following tiny report, truncated to
+the first three samples and first three reference sequence sites:
+
+        |231   |233   |234   |
+
+Prior   |CC 99 |GG 99 |GG 51 |
+        |      |      |AG 38 |
+        |      |      |AA 10 |      
+
+sample1 |CC 99 |GG 99 |AG 89 |
+        |      |      |GG 10 |      
+
+sample2 |None  |None  |None  |
+
+sample3 |CC 99 |GG 99 |AA 99 |
+
+A few things can be read out of this table:
+
+ - The first set of rows (labeled "Prior") tells us that at sites 231
+   and 233, CC and GG genotypes dominate the population, while site 234
+   has significant variation: 51% of sites are GG, 38% are AG, and 10%
+   are AA.  Because there was considerably less uncertainty at sites 231
+   and 233, only the first row of the block is used in those columns.
+   The other rows are empty.
+   
+ - Something went wrong with sample2, and no alignable sequence could be
+   produced from its tracefiles at these loci, so there are no
+   predictions.
+
+ - No traces produced sequence alignable at position 232, so it was
+   excluded from the table.
+   
+ - There is some uncertainty about site 234 in sample1, but it's AG with
+   89% probability.  (This probability takes multiple sampling into
+   account.  If an allele is rare at a given site, there will need to be
+   strong trace file evidence before that allele is called with
+   confidence in any sample.)
+
+ - In sites 231 and 233, only the first row assigned to sample1 is used,
+   because those genotype calls were very confident.
+
+(SnppnS is designed for detection of *rare* alleles, so it assumes a
+LARGE sample size.  For SMALL sample sizes, unobserved genotypes will
+have high probabilities in the population-level distributions.  Very
+roughly speaking, these distributions behave approximately like mean
+posteriors given a Dirichlet "+1" prior and the observed genotypes.  A
+small number of genotype observations will not drastically reduce the
+posterior probability of unobserved genotypes.)
+
+CONTACT INFORMATION
+-------------------
+
+I welcome any comments, questions or criticisms regarding SnppnS and
+this documentation.  I can be reached at alx@mit.edu for the forseeable
+future.
+
+                                                   -- Alex Coventry
+                                                      Ithaca, NY
+                                                      Spring, 2009
