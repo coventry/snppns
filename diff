@@ -1,0 +1,306 @@
+*** /home/coventry/src/phred-new/setQual.c	2002-07-26 18:22:09.000000000 -0400
+--- /home/coventry/org/notebook/1707-bayesian-site-frequency-analysis/phred/source/setQual.c	2009-03-04 15:15:07.000000000 -0500
+***************
+*** 40,47 ****
+--- 40,147 ----
+  #include <stdlib.h>
+  #include <string.h>
+  #include <math.h>
++ #include <assert.h>
+  #include "phred.h"
+  
++ #define MAX_NUM_PEAKS 10000
++ 
++ void copyObservedPeak(struct observed_peak *peak,
++ 		      struct observed_peak *peak_copy) {
++   int i, j;
++   peak_copy->area		= peak->area;
++   peak_copy->relative_area	= peak->relative_area;
++   peak_copy->relative_nuc_area	= peak->relative_nuc_area;
++   peak_copy->nuc 		= peak->nuc;
++   for (i = 0; i < MAX_NUM_SPLITS+1; i++) {
++     peak_copy->peak[i]		= peak->peak[i];
++     for (j = 0; j < MAX_NUM_SPLITS+1; j++) {
++       peak_copy->split[i][j]	= peak->split[i][j];
++     }
++   }
++   peak_copy->first_peak_index	= peak->first_peak_index;
++   peak_copy->last_peak_index	= peak->last_peak_index;
++   for (i = 0; i < MAX_RIGHT_SHIFT+MAX_LEFT_SHIFT+1; i++) {
++     peak_copy->dp[i]		= peak->dp[i];
++     peak_copy->scores[i]	= peak->scores[i];
++   }
++   peak_copy->shift		= peak->shift;
++   peak_copy->i_left		= peak->i_left;
++   peak_copy->i_rite		= peak->i_rite;
++   peak_copy->i_maxx		= peak->i_maxx;
++   peak_copy->type		= peak->type;
++   peak_copy->next		= peak->next;
++   peak_copy->prev		= peak->prev;
++ }
++ 
++ void copyPeak(Peak *peak, Peak *copy_peak) {
++   copy_peak->pred_location	= peak->pred_location;
++   copy_peak->pred_period	= peak->pred_period;
++   copy_peak->proportion_fitted	= peak->proportion_fitted;
++   copy_peak->total_signal	= peak->total_signal;
++   copy_peak->last10		= peak->last10 ;
++   copy_peak->nuc		= peak->nuc ;
++   copy_peak->obs_peak		= peak->obs_peak;
++   copy_peak->best_obs_peak	= peak->best_obs_peak;
++   copy_peak->best_uncalled_peak = peak->best_uncalled_peak;
++   copy_peak->next_no_observed	= peak->next_no_observed ;
++   copy_peak->fixed		= peak->fixed ;
++   copy_peak->next		= peak->next;
++   copy_peak->prev		= peak->prev ;
++ }
++ 
++ void copy_traces(FLOAT **tr_vals, FLOAT **tr_vals_copy,
++ 		 int tr_length) {
++   int nucidx, tridx;
++   for (nucidx = 0 ; nucidx < 4 ; nucidx++) {
++     for (tridx = 0 ; tridx < tr_length ; tridx++){
++       tr_vals_copy[nucidx][tridx] = tr_vals[nucidx][tridx];
++     }
++   }
++ }
++ 
++ void copy_peaks(Peak *first_peak, Peak *copy_peaks) {
++   Peak *peak;
++   int peakidx;
++   peakidx = 0;
++   for( peak = first_peak; peak; peak = peak->next ) {
++     copyPeak(peak, &(copy_peaks[peakidx]));
++     if (peakidx > 0) {
++       copy_peaks[peakidx-1].next = &(copy_peaks[peakidx]);
++       copy_peaks[peakidx].prev   = &(copy_peaks[peakidx-1]);
++     }
++     peakidx++;
++   }
++ }
++ 
++ void zero_peak(FLOAT **tr_val, int tr_length,
++ 	       struct observed_peak *peak) {
++   int tr_idx;
++   /* Zero the appropriate nucleotide channel to the left of the peak
++      boundaries for as long as the value is decreasing. */
++   for (tr_idx = peak->i_left-1;
++        ((tr_idx >= 0) &&
++ 	(tr_val[peak->nuc][tr_idx] < tr_val[peak->nuc][tr_idx+1]));
++        tr_idx--) {
++     /* Zero the value just after, to conserve the loop condition. */
++     tr_val[peak->nuc][tr_idx+1] = 0;
++   }
++   assert(tr_idx >= -1);
++   tr_val[peak->nuc][tr_idx+1] = 0;
++   /* And similarly for the channel to the right */
++   for (tr_idx = peak->i_rite+1;
++        ((tr_idx < tr_length) &&
++ 	(tr_val[peak->nuc][tr_idx] < tr_val[peak->nuc][tr_idx-1]));
++        tr_idx++) {
++     tr_val[peak->nuc][tr_idx-1] = 0;
++   }
++   assert(tr_idx <= tr_length);
++   tr_val[peak->nuc][tr_idx-1] = 0;
++   /* Zero the interior of the peak, too */
++   for (tr_idx = peak->i_left; tr_idx <= peak->i_rite; tr_idx++) {
++     tr_val[peak->nuc][tr_idx] = 0;
++   }
++ }
++ 
+  #ifdef ANSI_C
+  int setQual( int tr_length, FLOAT **tr_vals, FLOAT *tot_vals,
+               int num_base, Peak *first_peak, int *quality, PhredData *phredData,
+***************
+*** 60,71 ****
+--- 160,314 ----
+  PhredData *phredData;
+  #endif
+  {
++   int nucidx, tridx, peakmod, seqidx, peakidx, seqindices[MAX_NUM_PEAKS];
++   int cpeakindices[MAX_NUM_PEAKS], num_candidates, cpeakidx, cnumcands;
++   int cqualities[MAX_NUM_PEAKS], major_qualities[MAX_NUM_PEAKS];
++   int minor_qualities[MAX_NUM_PEAKS];
++   Peak *peak, peaks[MAX_NUM_PEAKS];
++   struct observed_peak opeaks[MAX_NUM_PEAKS];
++   FLOAT **tr_vals_copy;
++   assert(num_base < MAX_NUM_PEAKS); // Can't fit more than this
++ 
++   tr_vals_copy = (FLOAT **)ourMalloc(4*sizeof(FLOAT *));
++   for (nucidx = 0; nucidx < 4 ; nucidx++) {
++     tr_vals_copy[nucidx] = (FLOAT *)ourMalloc(tr_length*sizeof(FLOAT));
++   }      
++ 
++   /* Get a list of the peaks with nontrivial best_uncalled_peak
++      members.  The linked list will be copied to the peaks array in
++      order, so we need the indices of them in this array.  */
++   peakidx = seqidx = 0;
++   for( peak = first_peak; peak; peak = peak->next ) {
++     if (peak->obs_peak && peak->best_obs_peak && \
++ 	peak->best_uncalled_peak) {
++ 	seqindices[peakidx] = seqidx;
++ 	peakidx++;
++     }
++     seqidx++;
++   }
++   assert(num_base == seqidx);
++   num_candidates = peakidx;
++ 
++   /* Now, we don't want to simultaneously interfere with traces less
++      than 8 base pairs apart, because that's the window phred looks in
++      to evaluate base quality.  So group the candidate peaks by their
++      remainder mod 8. */
++   for (peakmod = 0; peakmod < 8; peakmod++) {
++     /* Find the peaks whose positions satisfy the current remainder
++        condition */
++     cpeakidx = 0;
++     for (peakidx = 0; peakidx < num_candidates ; peakidx++) {
++       if ((seqindices[peakidx] % 8) == peakmod) {
++ 	cpeakindices[cpeakidx] = peakidx;
++ 	cpeakidx++;
++       }
++     }
++     cnumcands = cpeakidx;
++     /* ********************************************************************
++        For those peaks, first get the qualities when the uncalled
++        bases are zeroed out. */
++     
++     /* ...get a fresh copy of the traces and peaks, so we don't mess
++        up the originals */
++     copy_traces(tr_vals, tr_vals_copy, tr_length);
++     copy_peaks(first_peak, peaks);
++     for (cpeakidx = 0; cpeakidx < cnumcands; cpeakidx++) {
++       seqidx = seqindices[cpeakindices[cpeakidx]];
++       /* Zero out the uncalled peak */
++       zero_peak(tr_vals_copy, tr_length,
++ 		peaks[seqidx].best_uncalled_peak);
++       /* Wipe out the record that there's an uncalled peak, here. */
++       peaks[seqidx].best_uncalled_peak = NULL;
++     }
++     /* ...get the quality scores given these zeroings */
++     _setQual(tr_length, tr_vals_copy, tot_vals, num_base, peaks, cqualities,
++ 	     phredData, qualityValueCeilingOption, qualityValueCeiling);
++     /* ...record the qualities of the sites we just monkeyed with */
++     for (cpeakidx = 0; cpeakidx < cnumcands; cpeakidx++) {
++       seqidx = seqindices[cpeakindices[cpeakidx]];
++       major_qualities[seqidx] = cqualities[seqidx];
++     }
++     /* ********************************************************************
++        Now repeat the procedure, this time zeroing the *called* bases. */
++ 
++     copy_traces(tr_vals, tr_vals_copy, tr_length);
++     copy_peaks(first_peak, peaks);
++     for (cpeakidx = 0; cpeakidx < cnumcands; cpeakidx++) {
++       seqidx = seqindices[cpeakindices[cpeakidx]];
++       zero_peak(tr_vals_copy, tr_length, peaks[seqidx].best_obs_peak);
++       /* Make the best_uncalled_peak the best called peak */
++       /* ...take a copy and copy over the type member from the best peak */
++       copyObservedPeak(peaks[seqidx].best_uncalled_peak, &opeaks[seqidx]);
++       opeaks[seqidx].type = peaks[seqidx].obs_peak->type;
++       peaks[seqidx].best_obs_peak = &(opeaks[seqidx]);
++       peaks[seqidx].obs_peak = &(opeaks[seqidx]);
++       peaks[seqidx].nuc = "ACGT"[peaks[seqidx].best_uncalled_peak->nuc];
++       /* Wipe out the record that there's an uncalled peak, here. */
++       peaks[seqidx].best_uncalled_peak = NULL;
++     }
++     /* ...get the quality scores given these zeroings */
++     _setQual(tr_length, tr_vals_copy, tot_vals, num_base, peaks, cqualities,
++ 	     phredData, qualityValueCeilingOption, qualityValueCeiling);
++     /* ...record the qualities of the sites we just monkeyed with */
++     for (cpeakidx = 0; cpeakidx < cnumcands; cpeakidx++) {
++       seqidx = seqindices[cpeakindices[cpeakidx]];
++       minor_qualities[seqidx] = cqualities[seqidx];
++     }
++   }
++ 
++   /* Free the memory under tr_vals_copy */
++   for (nucidx = 0; nucidx < 4 ; nucidx++) {
++     free(tr_vals_copy[nucidx]);
++   }
++   free(tr_vals_copy);
++ 
++   /* Report the values we computed */
++   /* ...copy the peaks one last time so we have them in order */
++   copy_peaks(first_peak, peaks);
++   for (peakidx = 0; peakidx < num_candidates; peakidx++) {
++     seqidx = seqindices[peakidx];
++     peak = &(peaks[seqidx]);
++     printf("%i %c %i %c %i\n",
++ 	   seqidx,
++ 	   "ACGT"[peak->best_obs_peak->nuc],
++ 	   major_qualities[seqidx],
++ 	   "ACGT"[peak->best_uncalled_peak->nuc],
++ 	   minor_qualities[seqidx]);
++   }
++ 
++   /* Get the unadulterated qualities, too, so the rest of phred
++      doesn't complain. */
++   _setQual(tr_length, tr_vals, tot_vals, num_base, peaks, quality,
++ 	   phredData, qualityValueCeilingOption, qualityValueCeiling);
++ }
++ 
++ /* The original setQual */
++ 
++ #ifdef ANSI_C
++ int _setQual( int tr_length, FLOAT **tr_vals, FLOAT *tot_vals,
++              int num_base, Peak *first_peak, int *quality, PhredData *phredData,
++              int qualityValueCeilingOption, int qualityValueCeiling )
++ #else
++ int _setQual( tr_length, tr_vals, tot_vals, num_base, first_peak, quality,
++              phredData, qualityValueCeilingOption, qualityValueCeiling )
++ int tr_length;
++ FLOAT **tr_vals;
++ FLOAT *tot_vals;
++ int num_base;
++ Peak *first_peak;
++ int *quality;
++ int qualityValueCeilingOption;
++ int qualityValueCeiling;
++ PhredData *phredData;
++ #endif
++ {
+    int i, j;
+    int numBase;
+    int numRow;
+    BaseQual *baseQual;
+    QualValTable *qualValTable;
+    Option *option;
++   Peak *peak;
+  
+    option = getOption();
+  
+***************
+*** 253,259 ****
+    */
+    ourFree( (char *)baseQual );
+  
+    return( OK );
+  }
+- 
+- 
+--- 496,520 ----
+    */
+    ourFree( (char *)baseQual );
+  
++ #if 0
++   i = 0;
++   for( peak = first_peak->next; peak; peak = peak->next ) {
++     printf("%i ", i++);
++     if (peak->best_obs_peak) {
++       printf("%i %i %i ",
++ 	     quality[i],
++ 	     peak->best_obs_peak->nuc,
++ 	     peak->best_obs_peak->i_maxx);
++       
++     }
++     if (peak->best_uncalled_peak) {
++       assert(peak->best_obs_peak);
++       printf("%i %i ",
++ 	     peak->best_uncalled_peak->nuc,
++ 	     peak->best_uncalled_peak->i_maxx);
++     }
++     printf("\n");
++   }
++ #endif
+    return( OK );
+  }
