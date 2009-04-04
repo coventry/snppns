@@ -170,9 +170,6 @@ SnppnS usage.
 
 PATCHING AND BUILDING PHRED AND PYTHON SUBCOMPONENT
 ---------------------------------------------------
-
-XXX FIXME: The phred parameter file needs to be taken from the latest
-version of phred
   
 This release provides a patch to the phred source code.  The phred
 application is distributed under a fairly restrictive licence, so I
